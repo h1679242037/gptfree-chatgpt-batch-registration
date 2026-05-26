@@ -23,6 +23,10 @@ def _strip_quotes(value):
 
 
 def load_cloud_mail_env(paths=ENV_FILES):
+    """Load Cloud Mail variables from known env files and CLOUD_MAIL_* env vars.
+
+    Later sources override earlier file values; process environment variables win.
+    """
     env = {}
     for path in paths:
         try:
@@ -50,6 +54,7 @@ def _first(env, names):
 
 
 def normalize_cloud_mail_base_url(value):
+    """Normalize a Cloud Mail API host/base URL to an HTTPS URL without trailing slash."""
     value = str(value or "").strip().rstrip("/")
     if not value:
         return ""
@@ -59,6 +64,7 @@ def normalize_cloud_mail_base_url(value):
 
 
 def normalize_cloud_mail_domain(value):
+    """Normalize a Cloud Mail inbox domain by stripping protocol, @, paths, and slash."""
     value = str(value or "").strip().lower()
     value = re.sub(r"^https?://", "", value)
     value = value.lstrip("@").split("/", 1)[0]
@@ -66,6 +72,7 @@ def normalize_cloud_mail_domain(value):
 
 
 def get_cloud_mail_config(env=None):
+    """Return Cloud Mail configuration derived from env files or supplied mapping."""
     env = env or load_cloud_mail_env()
     # API is served on CLOUD_MAIL_CUSTOM_DOMAIN (mail.*), while inbox addresses
     # should use CLOUD_MAIL_DOMAIN. Keep them separate.
@@ -87,6 +94,7 @@ def get_cloud_mail_config(env=None):
 
 
 def mask_value(value):
+    """Return a short redacted representation for logging config values."""
     value = str(value or "")
     if not value:
         return "<empty>"
@@ -128,6 +136,7 @@ def _cloud_mail_request(config, path, payload, token=None, timeout=20):
 
 
 def get_cloud_mail_token(config=None):
+    """Authenticate to Cloud Mail and return an API token/accessToken string."""
     config = config or get_cloud_mail_config()
     if not config["base_url"]:
         raise RuntimeError("Cloud Mail API address is missing")
@@ -148,11 +157,13 @@ def get_cloud_mail_token(config=None):
 
 
 def generate_cloud_mail_local_part():
+    """Generate a random local part suitable for a temporary Cloud Mail address."""
     chars = string.ascii_lowercase + string.digits
     return "gpt" + "".join(random.choices(chars, k=10))
 
 
 def create_cloud_mail_address(local_part=None, config=None, token=None):
+    """Create a Cloud Mail inbox and return the full email address."""
     config = config or get_cloud_mail_config()
     if not config["domain"]:
         raise RuntimeError("Cloud Mail mail domain is missing")
@@ -164,6 +175,7 @@ def create_cloud_mail_address(local_part=None, config=None, token=None):
 
 
 def get_cloud_mail_messages(to_email, config=None, token=None, num=1, size=20):
+    """Fetch recent Cloud Mail messages for an inbox in newest-first order."""
     config = config or get_cloud_mail_config()
     token = token or get_cloud_mail_token(config)
     data = _cloud_mail_request(config, "/api/public/emailList", {
@@ -195,6 +207,7 @@ def get_cloud_mail_messages(to_email, config=None, token=None, num=1, size=20):
 
 
 def extract_six_digit_code(message):
+    """Extract the first standalone six-digit code from common message fields."""
     if not isinstance(message, dict):
         return None
     fields = [
@@ -212,6 +225,7 @@ def extract_six_digit_code(message):
 
 
 def poll_cloud_mail_otp(to_email, after_ts=0, timeout=90, interval=5):
+    """Poll Cloud Mail until a six-digit code is found or the timeout expires."""
     config = get_cloud_mail_config()
     token = get_cloud_mail_token(config)
     deadline = time.time() + timeout

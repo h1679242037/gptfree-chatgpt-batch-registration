@@ -212,7 +212,7 @@ class CDP:
         }})()""", timeout=10)
 
     async def click_account_card(self):
-        return await self.ev("""(() => {
+        return await self.ev(r"""(() => {
             function vis(e) { const s=getComputedStyle(e), r=e.getBoundingClientRect(); return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0; }
             const els = Array.from(document.querySelectorAll('button,a,[role=button]')).filter(vis);
             const el = els.find(e => /选择帐户|choose account|Lucy|\+56|@/.test((e.innerText||e.textContent||''))) || els[0];
@@ -335,6 +335,12 @@ def extract_openai_code(message):
 
 
 def create_or_reuse_cloud_mail_address(local_part):
+    """Create a Cloud Mail address or return the existing address on duplicate.
+
+    Cloud Mail reports duplicates as API errors. For deterministic helper runs the
+    requested local part may already exist, so duplicate responses are treated as a
+    successful reuse and reconstructed from the configured mail domain.
+    """
     try:
         return create_cloud_mail_address(local_part)
     except RuntimeError as exc:
@@ -349,6 +355,7 @@ def create_or_reuse_cloud_mail_address(local_part):
 
 
 def poll_latest_openai_otp(address, after_ts=0, timeout=120, interval=5):
+    """Poll Cloud Mail and return the newest matching OpenAI verification code."""
     config = get_cloud_mail_config()
     token = get_cloud_mail_token(config)
     deadline = time.time() + timeout
@@ -375,6 +382,15 @@ def poll_latest_openai_otp(address, after_ts=0, timeout=120, interval=5):
             log("  Cloud Mail checked, inbox empty")
         time.sleep(interval)
     return None
+
+
+def wait_for_otp(address, after_ts=0, timeout=120, interval=5):
+    """Wait for and return the latest OpenAI six-digit OTP from Cloud Mail.
+
+    This public wrapper keeps the helper API explicit for tests and manual reuse;
+    internally it delegates to poll_latest_openai_otp.
+    """
+    return poll_latest_openai_otp(address, after_ts=after_ts, timeout=timeout, interval=interval)
 
 
 async def wait_until(cdp, pred, timeout=60, interval=2):
@@ -413,7 +429,12 @@ USER_AGENTS = [
 ]
 
 def start_chrome(port=9336, user_data_dir="/tmp/chrome-gptfree-helper"):
-    """Start Chrome with the same configuration as batch_register_v2.py"""
+    """Launch an isolated headless Chrome instance for Phase-2 OAuth.
+
+    Existing helper Chrome processes for the same CDP port/profile are removed,
+    a fresh temporary profile is started with remote debugging enabled, and the
+    function returns the subprocess handle after CDP readiness succeeds.
+    """
     # Kill existing Chrome instances
     try:
         ps = subprocess.check_output(["ps", "-eo", "pid,args"], text=True)
@@ -565,7 +586,7 @@ async def run_oauth(args):
 
         # Handle direct email-verification after password login (account already has email)
         if "email-verification" in (snap["url"] or "") and "add-email" not in (snap["url"] or ""):
-            # Extract email from page text like "输入我们刚刚向 xxx@yyy.zzz 发送的验证码"
+            # Extract email from page text such as "code sent to user at domain".
             page_text = snap.get("text") or ""
             email_match = re.search(r'[\w.+-]+@[\w.-]+\.\w+', page_text)
             otp_target_email = email_match.group(0) if email_match else account_email
@@ -672,9 +693,10 @@ async def run_oauth(args):
     return 0
 
 
-def main():
+def build_arg_parser():
+    """Build the command-line parser used by the CPA OAuth helper."""
     p = argparse.ArgumentParser(description="GPTFree Phase-2-only CPA OAuth for existing ChatGPT account")
-    p.add_argument("--phone", help="Full phone number, e.g. +56978314304; optional when browser already has account chooser")
+    p.add_argument("--phone", help="Full phone number, e.g. +569****4304; optional when browser already has account chooser")
     p.add_argument("--password", help="OpenAI password; optional when browser session is already logged in")
     p.add_argument("--email", help="Existing email to bind/use; defaults to creating Cloud Mail address")
     p.add_argument("--email-prefix", help="Cloud Mail local part prefix/name, e.g. lucymartin2042")
@@ -687,6 +709,17 @@ def main():
     p.add_argument("--start-chrome", action="store_true", help="Start a new Chrome instance before running")
     p.add_argument("--close-chrome", action="store_true", help="Kill Chrome after finishing (only if --start-chrome)")
     p.add_argument("--dry-run", action="store_true", help="Only check CPA key, Cloud Mail config, and CDP pages")
+    return p
+
+
+def main():
+    """Parse helper CLI flags and execute Phase-2 CPA OAuth import.
+
+    The helper can connect to an existing CDP browser or self-launch Chrome with
+    --start-chrome. When paired with --close-chrome it also tears down the
+    launched Chrome instance after OAuth completion.
+    """
+    p = build_arg_parser()
     args = p.parse_args()
     rc = asyncio.run(run_oauth(args))
     # Kill Chrome if --close-chrome is set

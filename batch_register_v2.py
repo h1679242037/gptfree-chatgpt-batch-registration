@@ -378,14 +378,24 @@ def poll_latest_openai_otp(address, after_ts=0, timeout=120, interval=5):
 
 
 def get_email_otp(target_email, after_ts, timeout=90, jwt=None):
-    """Get email OTP via local Cloud Mail only. Legacy CF/Gmail branches are disabled."""
+    """Return the newest OpenAI email OTP for a Cloud Mail inbox.
+
+    Args:
+        target_email: Inbox address to poll.
+        after_ts: Ignore messages older than this Unix timestamp when available.
+        timeout: Maximum seconds to wait for a matching message.
+        jwt: Provider marker retained for compatibility; only ``"cloudmail"`` is active.
+
+    Returns:
+        A six-digit verification code string, or ``None`` when no code is found.
+    """
     if jwt == "cloudmail":
         return poll_latest_openai_otp(target_email, after_ts, timeout=timeout)
     log("    [email] non-Cloud Mail providers disabled in local gptfree patch")
     return None
 
 def sub2api_request(method, path, token=None, data=None):
-    """Helper for Sub2API API calls."""
+    """Send one JSON request to the configured Sub2API-compatible panel."""
     cmd = ["curl", "-sS", "--max-time", "15", "-X", method]
     if token:
         cmd += ["-H", f"Authorization: Bearer {token}"]
@@ -426,13 +436,23 @@ def sub2api_login():
     return resp["data"]["access_token"]
 
 def panel_login():
+    """Authenticate to the selected import backend when a session token is needed.
+
+    CPA mode uses management-key calls and does not require a login token, so this
+    returns ``None``. Sub2API mode performs an admin login and returns its bearer
+    token for subsequent API calls.
+    """
     if PANEL_MODE == "cpa":
         return None
     return sub2api_login()
 
 
 def wait_cpa_auth_status(state, timeout=120, interval=2):
-    """Poll CPA auth status until success or timeout."""
+    """Poll the CPA management API until an OAuth state finishes or times out.
+
+    This standalone utility is useful for tests and manual verification even when
+    the main v2 flow delegates callback completion to gptfree_cpa_existing_account.py.
+    """
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
@@ -447,7 +467,12 @@ def wait_cpa_auth_status(state, timeout=120, interval=2):
 
 
 def restart_chrome_with_fingerprint():
-    """Kill Chrome and restart with randomized fingerprint (runs on OC24 locally)"""
+    """Restart an isolated CDP Chrome profile with randomized browser fingerprint.
+
+    The function removes the previous registration profile, starts headless Chrome
+    on the configured CDP port, applies randomized viewport/user-agent values, and
+    verifies that an ``about:blank`` page target is reachable before registration.
+    """
     w, h = random.choice(WINDOW_SIZES)
     ua = random.choice(USER_AGENTS)
     
@@ -801,7 +826,12 @@ class CDP:
 
 
 async def register_account():
-    """Phase 1: Register new account with phone number"""
+    """Run Phase 1: buy a phone number and create a new ChatGPT account.
+
+    The coroutine drives the OpenAI/ChatGPT signup flow over CDP, handles phone
+    replacement and SMS polling through HeroSMS, fills profile prompts, and returns
+    the resulting phone/password pair when account creation succeeds.
+    """
     act_id, phone = buy_number()
     if not act_id:
         log("  ✗ Failed to buy number")
@@ -1324,6 +1354,13 @@ async def register_account():
 
 
 async def main():
+    """Run the batch v2 two-phase workflow for the requested account count.
+
+    Phase 1 is handled in-process by ``register_account``. Phase 2 is delegated to
+    ``gptfree_cpa_existing_account.py`` via subprocess so the OAuth helper can own
+    phone login, Cloud Mail OTP handling, CPA callback submission, and Chrome
+    lifecycle flags. Results are appended as JSONL success/failure records.
+    """
     target_count = _args.count
     
     log("=" * 60)
