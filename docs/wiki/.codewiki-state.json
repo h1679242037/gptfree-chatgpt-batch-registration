@@ -1,0 +1,47 @@
+{
+  "repo_name": "chatgpt-batch-registration-main",
+  "source_path": "/home/qiont/.hermes/skills/browser/gptfree/references/chatgpt-batch-registration-main",
+  "source_sha": "5a6a1bb4dc270ed306b8e715b59637a9445f0360",
+  "generated_at": "2026-05-26T10:44:45Z",
+  "generator": "hermes-agent code-wiki skill v0.1.0",
+  "language": "zh-CN",
+  "modules_documented": [
+    "batch_register_v2.py",
+    "cloud_mail_local.py",
+    "gptfree_cpa_existing_account.py",
+    "auto_batch_monitor.py",
+    "gptfree_local_dry_run.py",
+    "gptfree_sub2api_dry_run.py",
+    "test_batch_cpa_helpers.py"
+  ],
+  "files_generated": [
+    "README.md",
+    "architecture.md",
+    "getting-started.md",
+    "modules/batch_register_v2.md",
+    "modules/cloud_mail_local.md",
+    "modules/gptfree_cpa_existing_account.md",
+    "modules/auto_batch_monitor.md",
+    "modules/dry_run_tools.md",
+    "modules/tests.md",
+    "diagrams/class-diagram.md",
+    "diagrams/sequences.md"
+  ],
+  "verification": {
+    "py_compile": "passed",
+    "pytest": "failed: test_batch_cpa_helpers.py references missing batch_register_v2.wait_cpa_auth_status",
+    "source_files_read": [
+      "README.md",
+      "requirements.txt",
+      ".env.example",
+      "docs/troubleshooting.zh.md",
+      "batch_register_v2.py",
+      "cloud_mail_local.py",
+      "gptfree_cpa_existing_account.py",
+      "auto_batch_monitor.py",
+      "gptfree_local_dry_run.py",
+      "gptfree_sub2api_dry_run.py",
+      "test_batch_cpa_helpers.py"
+    ]
+  }
+}
