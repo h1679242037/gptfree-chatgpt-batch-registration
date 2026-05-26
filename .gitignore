@@ -1,0 +1,16 @@
+.env
+*.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.bak*
+*.log
+*.jsonl
+*.sqlite
+*.db
+.DS_Store
+accounts*.jsonl
+chatgpt-accounts*.jsonl
+codex-*.json
+worker_logs/
+chrome-*/
